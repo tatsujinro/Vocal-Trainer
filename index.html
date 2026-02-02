@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Daily Vocal Workout</title>
     <style>
-        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #ffeb3b; --accent-light: #ffff72; }
+        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #ea80fc; --accent-light: #ffb2ff; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; text-align: center; user-select: none; }
         h1 { color: var(--accent); margin-bottom: 5px; font-size: 1.5rem; }
         p { color: #888; margin-top: 0; font-size: 0.9rem; }
@@ -38,7 +38,7 @@
         .play-btn { 
             background: var(--accent); color: #000; border: none; padding: 18px 40px; border-radius: 50px; 
             font-size: 1.2rem; font-weight: 800; margin-top: 10px; width: 100%; letter-spacing: 1px;
-            box-shadow: 0 0 20px rgba(255, 235, 59, 0.4); transition: transform 0.1s;
+            box-shadow: 0 0 20px rgba(234, 128, 252, 0.4); transition: transform 0.1s;
         }
         .play-btn:active { transform: scale(0.96); }
         .play-btn.stop { background: #ff5252; color: white; box-shadow: none; }
@@ -47,6 +47,7 @@
         .status-display { margin-top: 10px; height: 100px; display: flex; flex-direction: column; justify-content: center; background: #000; border-radius: 12px; border: 1px solid #333; }
         .current-note { font-size: 3rem; color: white; font-weight: 800; line-height: 1; }
         .action-text { font-size: 1.2rem; color: var(--accent); margin-top: 5px; font-weight: bold; }
+        .wake-status { font-size: 0.8rem; color: #555; margin-top: 5px; }
         
         .loading-mask {
             position: fixed; top:0; left:0; width:100%; height:100%; background: #121212; z-index: 999;
@@ -58,12 +59,12 @@
 
     <div id="loadingMask" class="loading-mask">
         <div style="font-size: 2rem; margin-bottom: 10px;">🎹</div>
-        <div>v16 系統初始化中...</div>
+        <div>v18 系統初始化中...</div>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem; padding:20px;"></div>
     </div>
 
-    <h1>Daily Vocal Workout</h1>
-    <p>首拍定調版</p>
+    <h1>聲樂教練 Pro</h1>
+    <p>媒體音量解鎖版</p>
 
     <div class="tabs">
         <button id="btn-liptrill" class="tab-btn active" onclick="switchMode('liptrill')">👄 唇顫音</button>
@@ -97,7 +98,7 @@
 
         <div class="slider-group">
             <div class="slider-label-row">
-                <span>預備拍音量 (鼓棒)</span>
+                <span>預備拍音量</span>
                 <span id="volStickVal" class="val-display">60%</span>
             </div>
             <input type="range" id="volStick" min="0" max="100" step="1" value="60">
@@ -123,6 +124,7 @@
     <div class="status-display">
         <div class="current-note" id="noteDisplay">Ready</div>
         <div class="action-text" id="actionDisplay">準備開始</div>
+        <div class="wake-status" id="wakeStatus"></div>
     </div>
 
     <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ 開始練習</button>
@@ -1660,10 +1662,18 @@ var _tone_0000_JCLive_sf2_file={
     </script>
 
     <script>
+    // --- v18: 靜音 MP3 Base64 (0.5秒) ---
+    // 這是一個極短的無聲 MP3，用來騙過 iOS 讓它切換到媒體音量模式
+    const SILENT_MP3 = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
     let audioCtx, player;
     let melodyGainNode, chordGainNode;
     let isPlaying = false;
     
+    // 隱形播放器
+    let silentAudioPlayer = new Audio(SILENT_MP3);
+    silentAudioPlayer.loop = true; // 循環播放以維持媒體模式
+
     let nextNoteTime = 0.0;
     let timerID;
     let lookahead = 25.0; 
@@ -1675,9 +1685,9 @@ var _tone_0000_JCLive_sf2_file={
     let currentMode = 'liptrill';
     let globalPeakIndex = 0;
     
-    // v16: 改為 4 拍預備
     let countInBeats = 4; 
-    
+    let wakeLock = null;
+
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     
     window.onload = function() {
@@ -1714,13 +1724,11 @@ var _tone_0000_JCLive_sf2_file={
         document.getElementById('bpm').addEventListener('input', function(e) {
             document.getElementById('bpmVal').innerText = e.target.value;
         });
-        
         document.getElementById('volMelody').addEventListener('input', updateGains);
         document.getElementById('volChord').addEventListener('input', updateGains);
         document.getElementById('volStick').addEventListener('input', function(e){
              document.getElementById('volStickVal').innerText = e.target.value + "%";
         });
-
         ['startNote', 'peakNote', 'endNote'].forEach(id => {
             document.getElementById(id).addEventListener('change', generateRoots);
         });
@@ -1790,7 +1798,6 @@ var _tone_0000_JCLive_sf2_file={
     function playStickClick(time) {
         let vol = document.getElementById('volStick').value / 100.0;
         if(vol <= 0.01) return;
-
         let osc = audioCtx.createOscillator();
         let gain = audioCtx.createGain();
         osc.frequency.setValueAtTime(1200, time);
@@ -1804,8 +1811,37 @@ var _tone_0000_JCLive_sf2_file={
         osc.stop(time + 0.1);
     }
 
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+                document.getElementById('wakeStatus').innerText = "💡 螢幕恆亮 | 🔊 媒體音量模式";
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function releaseWakeLock() {
+        if (wakeLock !== null) {
+            wakeLock.release();
+            wakeLock = null;
+            document.getElementById('wakeStatus').innerText = "";
+        }
+    }
+
     async function togglePlay() {
         if (isPlaying) { stop(); return; }
+
+        requestWakeLock();
+
+        // --- v18 關鍵：播放隱形 MP3 ---
+        // 這會強制 iOS 認為我們是「音樂播放器」，從而無視靜音開關
+        try {
+            await silentAudioPlayer.play();
+        } catch(e) {
+            console.log("Silent audio play failed", e);
+        }
 
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1821,8 +1857,6 @@ var _tone_0000_JCLive_sf2_file={
         isPlaying = true;
         rootIndex = 0;
         patternStepIndex = 0;
-        
-        // 確保根音列表已生成 (為了抓第一顆音)
         generateRoots();
 
         let btn = document.getElementById('playBtn');
@@ -1833,21 +1867,15 @@ var _tone_0000_JCLive_sf2_file={
         let beatDur = 60.0 / bpm;
         let now = audioCtx.currentTime;
         
-        // --- v16 關鍵：4拍預備 + 首拍長和弦 ---
         let preset = _tone_0000_JCLive_sf2_file;
         let firstRootName = currentRoots[0];
         let firstRootMidi = getMidiPitch(firstRootName);
-        let chordDur = beatDur * 4; // 讓首拍和弦延音 4 拍
+        let chordDur = beatDur * 4;
 
         for(let i=0; i<countInBeats; i++) {
             let t = now + (i * beatDur);
-            
-            // 每一拍都有 Click
             playStickClick(t);
-            
-            // 只有第 1 拍同時下和弦 (給調性)
             if(i === 0) {
-                // 使用 chordGainNode 確保受控於滑桿
                 [0, 4, 7].forEach(semi => {
                     player.queueWaveTable(audioCtx, chordGainNode, preset, t, firstRootMidi + semi, chordDur, 0.5);
                 });
@@ -1870,6 +1898,12 @@ var _tone_0000_JCLive_sf2_file={
 
     function stop() {
         isPlaying = false;
+        releaseWakeLock();
+        
+        // 停止隱形 MP3，釋放資源
+        silentAudioPlayer.pause();
+        silentAudioPlayer.currentTime = 0;
+        
         clearTimeout(timerID);
         if(player && audioCtx) player.cancelQueue(audioCtx);
         
