@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>吉他手專屬聲樂教練</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --card-bg: #2d2d2d;
+            --text-main: #e0e0e0;
+            --accent: #4CAF50;
+            --accent-hover: #45a049;
+            --highlight: #ff9800;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 5px; color: var(--accent); }
+        p.subtitle { font-size: 0.9rem; color: #aaa; margin-bottom: 20px; }
+        
+        .control-panel {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        label { display: block; margin: 10px 0 5px; font-size: 0.9rem; text-align: left; }
+        input[type="range"] { width: 100%; height: 6px; background: #555; border-radius: 5px; outline: none; -webkit-appearance: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+
+        .tabs { display: flex; justify-content: center; gap: 5px; margin-bottom: 20px; }
+        .tab-btn {
+            background: #444; border: none; color: #ccc; padding: 10px 15px; border-radius: 8px; font-size: 0.9rem; cursor: pointer; flex: 1;
+        }
+        .tab-btn.active { background: var(--accent); color: white; font-weight: bold; }
+
+        .action-area { margin-top: 20px; }
+        .play-btn {
+            background: var(--accent); color: white; border: none; padding: 15px 40px; border-radius: 50px; font-size: 1.2rem; cursor: pointer; width: 100%; max-width: 300px;
+            box-shadow: 0 4px 10px rgba(76, 175, 80, 0.4); transition: transform 0.1s;
+        }
+        .play-btn:active { transform: scale(0.95); }
+        .stop-btn { background: #d32f2f; margin-top: 10px; display: none; }
+
+        .status-display {
+            margin-top: 20px; height: 60px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .current-note { font-size: 2rem; font-weight: bold; color: var(--highlight); }
+        .current-action { font-size: 1rem; color: #888; }
+        
+        .setup-row { display: flex; gap: 10px; justify-content: space-between; }
+        select { background: #444; color: white; border: none; padding: 5px; border-radius: 5px; width: 100%; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+    <h1>🎸 吉他手聲樂教練</h1>
+    <p class="subtitle">C2# - G5# 專屬音準開嗓工具</p>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="setMode('liptrill')">👄 唇顫音</button>
+        <button class="tab-btn" onclick="setMode('expansion')">📢 母音擴張</button>
+        <button class="tab-btn" onclick="setMode('jumps')">📈 八度跳躍</button>
+    </div>
+
+    <div class="control-panel">
+        <div class="setup-row">
+            <div style="flex:1; margin-right:5px;">
+                <label>起始根音 (低)</label>
+                <select id="startNote"></select>
+            </div>
+            <div style="flex:1; margin-left:5px;">
+                <label>頂點根音 (高)</label>
+                <select id="endNote"></select>
+            </div>
+        </div>
+
+        <label>播放速度: <span id="speedVal">0.75</span>x</label>
+        <input type="range" id="speed" min="0.5" max="1.5" step="0.05" value="0.75" oninput="updateDisplay()">
+
+        <label>導引音量 (Melody)</label>
+        <input type="range" id="volMelody" min="0" max="1" step="0.1" value="0.8">
+
+        <label>伴奏音量 (Chord)</label>
+        <input type="range" id="volChord" min="0" max="1" step="0.1" value="0.3">
+    </div>
+
+    <div class="status-display">
+        <div class="current-note" id="noteDisplay">準備開始</div>
+        <div class="current-action" id="actionDisplay">請按下播放</div>
+    </div>
+
+    <div class="action-area">
+        <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ 開始練習</button>
+        <button class="play-btn stop-btn" id="stopBtn" onclick="stopAudio()">⏹ 停止</button>
+    </div>
+
+<script>
+    // --- 音訊引擎 (Web Audio API) ---
+    let audioCtx;
+    let isPlaying = false;
+    let timeouts = [];
+    let currentOscillators = [];
+
+    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    
+    // 初始化選單
+    function initSelects() {
+        const startSel = document.getElementById('startNote');
+        const endSel = document.getElementById('endNote');
+        let options = [];
+        
+        for(let oct=2; oct<=5; oct++) {
+            notes.forEach(n => {
+                options.push(`${n}${oct}`);
+            });
+        }
+        
+        options.forEach(n => {
+            startSel.add(new Option(n, n));
+            endSel.add(new Option(n, n));
+        });
+
+        // 預設值
+        startSel.value = 'A3';
+        endSel.value = 'G4';
+    }
+
+    // 取得頻率
+    function getFreq(noteName) {
+        if(!noteName) return 440;
+        const note = noteName.slice(0, -1);
+        const octave = parseInt(noteName.slice(-1));
+        const semitone = notes.indexOf(note);
+        const midi = semitone + (octave + 1) * 12;
+        return 440 * Math.pow(2, (midi - 69) / 12);
+    }
+
+    // 生成鋼琴音色
+    function playPianoTone(freq, startTime, duration, vol, isChord) {
+        if (!audioCtx) return;
+        const gainNode = audioCtx.createGain();
+        gainNode.connect(audioCtx.destination);
+        
+        // 音量包絡 (ADSR)
+        const now = startTime;
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(vol, now + 0.02); // Attack
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration); // Decay
+
+        // 合成音色 (基頻 + 泛音)
+        const harmonics = isChord ? [1, 2, 3] : [1, 2, 3, 4];
+        const amps = isChord ? [1.0, 0.4, 0.2] : [1.0, 0.5, 0.2, 0.1];
+
+        harmonics.forEach((h, i) => {
+            const osc = audioCtx.createOscillator();
+            osc.type = isChord ? 'triangle' : 'sine'; // 和弦用三角波增加厚度
+            osc.frequency.value = freq * h;
+            osc.connect(gainNode);
+            osc.start(now);
+            osc.stop(now + duration);
+            currentOscillators.push(osc);
+        });
+    }
+
+    // 播放邏輯
+    let currentMode = 'liptrill';
+    
+    function setMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+        
+        // 自動調整預設音域
+        if(mode === 'liptrill') { 
+            document.getElementById('startNote').value = 'A3'; 
+            document.getElementById('endNote').value = 'C#4'; 
+        } else if(mode === 'expansion') { 
+            document.getElementById('startNote').value = 'A3'; 
+            document.getElementById('endNote').value = 'G4'; 
+        } else {
+            document.getElementById('startNote').value = 'C3'; 
+            document.getElementById('endNote').value = 'G4'; 
+        }
+        stopAudio();
+    }
+
+    function updateDisplay() {
+        document.getElementById('speedVal').innerText = document.getElementById('speed').value;
+    }
+
+    function togglePlay() {
+        if (isPlaying) {
+            stopAudio();
+        } else {
+            startExercise();
+        }
+    }
+
+    function stopAudio() {
+        isPlaying = false;
+        timeouts.forEach(t => clearTimeout(t));
+        timeouts = [];
+        currentOscillators.forEach(osc => {
+            try { osc.stop(); } catch(e){}
+        });
+        currentOscillators = [];
+        if(audioCtx) audioCtx.suspend();
+        
+        document.getElementById('playBtn').style.display = 'inline-block';
+        document.getElementById('stopBtn').style.display = 'none';
+        document.getElementById('noteDisplay').innerText = "準備就緒";
+        document.getElementById('actionDisplay').innerText = "按下播放開始";
+    }
+
+    async function startExercise() {
+        // 初始化 AudioContext (必須在用戶點擊後)
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+        isPlaying = true;
+        document.getElementById('playBtn').style.display = 'none';
+        document.getElementById('stopBtn').style.display = 'inline-block';
+
+        // 讀取參數
+        const startNote = document.getElementById('startNote').value;
+        const endNote = document.getElementById('endNote').value;
+        const speed = parseFloat(document.getElementById('speed').value);
+        const volMelody = parseFloat(document.getElementById('volMelody').value);
+        const volChord = parseFloat(document.getElementById('volChord').value);
+        
+        const beatTime = 0.4 / speed;
+
+        // 生成根音序列 (Chromatics)
+        const allOpts = Array.from(document.getElementById('startNote').options).map(o => o.value);
+        const sIdx = allOpts.indexOf(startNote);
+        const eIdx = allOpts.indexOf(endNote);
+        
+        let roots = [];
+        // 上升
+        for(let i=sIdx; i<=eIdx; i++) roots.push(allOpts[i]);
+        // 下降 (從最高音的前一個開始)
+        for(let i=eIdx-1; i>=0; i--) roots.push(allOpts[i]); // 直到 A2 (列表頭)
+        // 修正：如果 startNote 很高，下降要降到更低，這裡簡化為降回 A2
+        // 為符合之前的邏輯，我們讓下降段直接降到底 (Index 0)
+        
+        let timeline = 0; // 當前時間指針
+
+        // 定義模式
+        let intervals, totalBeats;
+        if(currentMode === 'liptrill') {
+            intervals = [0, 4, 7, 4, 0]; // 5 notes
+            totalBeats = 6;
+        } else if(currentMode === 'expansion') {
+            intervals = [0, 2, 4, 5, 7, 5, 4, 2, 0]; // 9 notes
+            totalBeats = 10;
+        } else {
+            intervals = [0, 12, 0]; // 3 notes
+            totalBeats = 4;
+        }
+
+        // 排程迴圈
+        roots.forEach((rootName, idx) => {
+            const rootFreq = getFreq(rootName);
+            const startTime = audioCtx.currentTime + timeline + 0.1; // 加一點緩衝
+
+            // 1. UI 更新排程 (使用 setTimeout)
+            let tId = setTimeout(() => {
+                document.getElementById('noteDisplay').innerText = rootName;
+                document.getElementById('actionDisplay').innerText = (idx < roots.length/2) ? "⬆ 上升中..." : "⬇ 下降中...";
+                if(idx === roots.length -1) setTimeout(stopAudio, beatTime * totalBeats * 1000);
+            }, timeline * 1000);
+            timeouts.push(tId);
+
+            // 2. 左手伴奏 (長和弦)
+            // 大三和弦: Root, Major 3rd (4 semitones), Perfect 5th (7 semitones)
+            const chordNotes = [0, 4, 7];
+            chordNotes.forEach(semi => {
+                const cf = rootFreq * Math.pow(2, semi/12);
+                playPianoTone(cf, startTime, beatTime * totalBeats, volChord * 0.5, true); 
+                // volChord * 0.5 避免和弦太搶戲
+            });
+
+            // 3. 右手導引 (旋律)
+            intervals.forEach((semi, i) => {
+                const noteTime = startTime + (i * beatTime);
+                const noteFreq = rootFreq * Math.pow(2, semi/12);
+                playPianoTone(noteFreq, noteTime, beatTime, volMelody, false);
+            });
+
+            // 4. 吸氣拍 (視覺提示)
+            let breathTime = startTime + (intervals.length * beatTime);
+            let tIdBreath = setTimeout(() => {
+                document.getElementById('actionDisplay').innerText = "😤 吸氣 / 放鬆";
+            }, (timeline + intervals.length * beatTime) * 1000);
+            timeouts.push(tIdBreath);
+
+            // 更新時間軸
+            timeline += (beatTime * totalBeats);
+        });
+    }
+
+    initSelects();
+</script>
+
+</body>
+</html>
