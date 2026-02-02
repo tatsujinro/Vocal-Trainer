@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Daily Vocal Workout</title>
     <style>
-        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #ea80fc; --accent-light: #ffb2ff; }
+        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #40c4ff; --accent-light: #82e9ff; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; text-align: center; user-select: none; }
         h1 { color: var(--accent); margin-bottom: 5px; font-size: 1.5rem; }
         p { color: #888; margin-top: 0; font-size: 0.9rem; }
@@ -38,7 +38,7 @@
         .play-btn { 
             background: var(--accent); color: #000; border: none; padding: 18px 40px; border-radius: 50px; 
             font-size: 1.2rem; font-weight: 800; margin-top: 10px; width: 100%; letter-spacing: 1px;
-            box-shadow: 0 0 20px rgba(234, 128, 252, 0.4); transition: transform 0.1s;
+            box-shadow: 0 0 20px rgba(64, 196, 255, 0.4); transition: transform 0.1s;
         }
         .play-btn:active { transform: scale(0.96); }
         .play-btn.stop { background: #ff5252; color: white; box-shadow: none; }
@@ -59,12 +59,12 @@
 
     <div id="loadingMask" class="loading-mask">
         <div style="font-size: 2rem; margin-bottom: 10px;">🎹</div>
-        <div>v18 系統初始化中...</div>
+        <div>v19 系統初始化中...</div>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem; padding:20px;"></div>
     </div>
 
     <h1>聲樂教練 Pro</h1>
-    <p>媒體音量解鎖版</p>
+    <p>非阻塞安全版</p>
 
     <div class="tabs">
         <button id="btn-liptrill" class="tab-btn active" onclick="switchMode('liptrill')">👄 唇顫音</button>
@@ -128,6 +128,10 @@
     </div>
 
     <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ 開始練習</button>
+    
+    <audio id="silentAudioPlayer" loop playsinline style="display:none;" 
+        src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA">
+    </audio>
 
     <script>
     'use strict';
@@ -1662,18 +1666,10 @@ var _tone_0000_JCLive_sf2_file={
     </script>
 
     <script>
-    // --- v18: 靜音 MP3 Base64 (0.5秒) ---
-    // 這是一個極短的無聲 MP3，用來騙過 iOS 讓它切換到媒體音量模式
-    const SILENT_MP3 = "data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-
     let audioCtx, player;
     let melodyGainNode, chordGainNode;
     let isPlaying = false;
     
-    // 隱形播放器
-    let silentAudioPlayer = new Audio(SILENT_MP3);
-    silentAudioPlayer.loop = true; // 循環播放以維持媒體模式
-
     let nextNoteTime = 0.0;
     let timerID;
     let lookahead = 25.0; 
@@ -1815,7 +1811,7 @@ var _tone_0000_JCLive_sf2_file={
         try {
             if ('wakeLock' in navigator) {
                 wakeLock = await navigator.wakeLock.request('screen');
-                document.getElementById('wakeStatus').innerText = "💡 螢幕恆亮 | 🔊 媒體音量模式";
+                document.getElementById('wakeStatus').innerText = "💡 螢幕恆亮 | 媒體模式(嘗試中)";
             }
         } catch (err) {
             console.error(err);
@@ -1833,15 +1829,18 @@ var _tone_0000_JCLive_sf2_file={
     async function togglePlay() {
         if (isPlaying) { stop(); return; }
 
+        // 1. 喚醒鎖
         requestWakeLock();
 
-        // --- v18 關鍵：播放隱形 MP3 ---
-        // 這會強制 iOS 認為我們是「音樂播放器」，從而無視靜音開關
-        try {
-            await silentAudioPlayer.play();
-        } catch(e) {
-            console.log("Silent audio play failed", e);
-        }
+        // --- v19 修復：非阻塞式播放 ---
+        // 嘗試播放隱形 MP3，但使用 catch 捕獲錯誤，且不使用 await 阻擋
+        // 這樣就算手機拒絕了 MP3，下面的鋼琴還是會響
+        let silentEl = document.getElementById('silentAudioPlayer');
+        silentEl.play().then(()=>{
+            console.log("Media mode active");
+        }).catch(e => {
+            console.log("Media mode rejected (Ringer mode active)", e);
+        });
 
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1900,9 +1899,10 @@ var _tone_0000_JCLive_sf2_file={
         isPlaying = false;
         releaseWakeLock();
         
-        // 停止隱形 MP3，釋放資源
-        silentAudioPlayer.pause();
-        silentAudioPlayer.currentTime = 0;
+        // 停止隱形 MP3
+        let silentEl = document.getElementById('silentAudioPlayer');
+        silentEl.pause();
+        silentEl.currentTime = 0;
         
         clearTimeout(timerID);
         if(player && audioCtx) player.cancelQueue(audioCtx);
