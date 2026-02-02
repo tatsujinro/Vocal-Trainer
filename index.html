@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>聲樂教練 v8</title>
+    <title>Daily Vocal Workout</title>
     <style>
-        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #7c4dff; --accent-light: #b47cff; }
+        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #ffeb3b; --accent-light: #ffff72; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; text-align: center; user-select: none; }
         h1 { color: var(--accent); margin-bottom: 5px; font-size: 1.5rem; }
         p { color: #888; margin-top: 0; font-size: 0.9rem; }
@@ -36,12 +36,13 @@
         .tab-btn.active { background: var(--card-bg); color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
         
         .play-btn { 
-            background: var(--accent); color: white; border: none; padding: 18px 40px; border-radius: 50px; 
+            background: var(--accent); color: #000; border: none; padding: 18px 40px; border-radius: 50px; 
             font-size: 1.2rem; font-weight: 800; margin-top: 10px; width: 100%; letter-spacing: 1px;
-            box-shadow: 0 0 20px rgba(124, 77, 255, 0.4); transition: transform 0.1s;
+            box-shadow: 0 0 20px rgba(255, 235, 59, 0.4); transition: transform 0.1s;
         }
         .play-btn:active { transform: scale(0.96); }
-        .play-btn.stop { background: #b0bec5; color: #000; box-shadow: none; }
+        .play-btn.stop { background: #ff5252; color: white; box-shadow: none; }
+        .play-btn.warming { background: #333; color: #888; pointer-events: none; }
 
         .status-display { margin-top: 10px; height: 100px; display: flex; flex-direction: column; justify-content: center; background: #000; border-radius: 12px; border: 1px solid #333; }
         .current-note { font-size: 3rem; color: white; font-weight: 800; line-height: 1; }
@@ -57,12 +58,12 @@
 
     <div id="loadingMask" class="loading-mask">
         <div style="font-size: 2rem; margin-bottom: 10px;">🎹</div>
-        <div>v8 系統初始化中...</div>
+        <div>v16 系統初始化中...</div>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem; padding:20px;"></div>
     </div>
 
     <h1>聲樂教練 Pro</h1>
-    <p>冷啟動穩定版</p>
+    <p>首拍定調版</p>
 
     <div class="tabs">
         <button id="btn-liptrill" class="tab-btn active" onclick="switchMode('liptrill')">👄 唇顫音</button>
@@ -92,6 +93,14 @@
                 <span id="bpmVal" class="val-display">100</span>
             </div>
             <input type="range" id="bpm" min="60" max="180" step="1" value="100">
+        </div>
+
+        <div class="slider-group">
+            <div class="slider-label-row">
+                <span>預備拍音量 (鼓棒)</span>
+                <span id="volStickVal" class="val-display">60%</span>
+            </div>
+            <input type="range" id="volStick" min="0" max="100" step="1" value="60">
         </div>
 
         <div class="slider-group">
@@ -1666,6 +1675,9 @@ var _tone_0000_JCLive_sf2_file={
     let currentMode = 'liptrill';
     let globalPeakIndex = 0;
     
+    // v16: 改為 4 拍預備
+    let countInBeats = 4; 
+    
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     
     window.onload = function() {
@@ -1702,19 +1714,26 @@ var _tone_0000_JCLive_sf2_file={
         document.getElementById('bpm').addEventListener('input', function(e) {
             document.getElementById('bpmVal').innerText = e.target.value;
         });
-        document.getElementById('volMelody').addEventListener('input', function(e) {
-            let percent = e.target.value;
-            document.getElementById('volMelodyVal').innerText = percent + "%";
-            if(melodyGainNode) melodyGainNode.gain.setTargetAtTime(percent / 100.0, audioCtx.currentTime, 0.05);
+        
+        document.getElementById('volMelody').addEventListener('input', updateGains);
+        document.getElementById('volChord').addEventListener('input', updateGains);
+        document.getElementById('volStick').addEventListener('input', function(e){
+             document.getElementById('volStickVal').innerText = e.target.value + "%";
         });
-        document.getElementById('volChord').addEventListener('input', function(e) {
-            let percent = e.target.value;
-            document.getElementById('volChordVal').innerText = percent + "%";
-            if(chordGainNode) chordGainNode.gain.setTargetAtTime(percent / 100.0, audioCtx.currentTime, 0.05);
-        });
+
         ['startNote', 'peakNote', 'endNote'].forEach(id => {
             document.getElementById(id).addEventListener('change', generateRoots);
         });
+    }
+
+    function updateGains() {
+        let melVol = document.getElementById('volMelody').value;
+        let choVol = document.getElementById('volChord').value;
+        document.getElementById('volMelodyVal').innerText = melVol + "%";
+        document.getElementById('volChordVal').innerText = choVol + "%";
+        
+        if(melodyGainNode) melodyGainNode.gain.setTargetAtTime(melVol / 100.0, audioCtx.currentTime, 0.05);
+        if(chordGainNode) chordGainNode.gain.setTargetAtTime(choVol / 100.0, audioCtx.currentTime, 0.05);
     }
 
     function switchMode(mode) {
@@ -1768,6 +1787,23 @@ var _tone_0000_JCLive_sf2_file={
         return notes.indexOf(note) + (oct + 1) * 12;
     }
 
+    function playStickClick(time) {
+        let vol = document.getElementById('volStick').value / 100.0;
+        if(vol <= 0.01) return;
+
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.frequency.setValueAtTime(1200, time);
+        osc.frequency.exponentialRampToValueAtTime(800, time + 0.05);
+        gain.gain.setValueAtTime(0, time);
+        gain.gain.linearRampToValueAtTime(vol, time + 0.001);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(time);
+        osc.stop(time + 0.1);
+    }
+
     async function togglePlay() {
         if (isPlaying) { stop(); return; }
 
@@ -1780,26 +1816,54 @@ var _tone_0000_JCLive_sf2_file={
         }
         if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-        // --- v8 修正：強制喚醒 ---
-        // 發送一個極短的靜音，強制解鎖瀏覽器音訊線程
-        let preset = _tone_0000_JCLive_sf2_file;
-        player.queueWaveTable(audioCtx, audioCtx.destination, preset, 0, 60, 0.01, 0.0);
-
-        melodyGainNode.gain.value = document.getElementById('volMelody').value / 100.0;
-        chordGainNode.gain.value = document.getElementById('volChord').value / 100.0;
+        updateGains();
 
         isPlaying = true;
         rootIndex = 0;
         patternStepIndex = 0;
         
-        // --- v8 修正：增加啟動緩衝 ---
-        // 原本 +0.1，現在改為 +0.25，給音色庫解碼和排程留出緩衝時間
-        nextNoteTime = audioCtx.currentTime + 0.25;
-        
-        generateRoots(); 
+        // 確保根音列表已生成 (為了抓第一顆音)
+        generateRoots();
 
-        document.getElementById('playBtn').innerHTML = "⏹ 停止";
-        document.getElementById('playBtn').classList.add('stop');
+        let btn = document.getElementById('playBtn');
+        btn.innerHTML = "🥁 1, 2, 3, 4 ...";
+        btn.classList.add('warming');
+        
+        let bpm = parseFloat(document.getElementById('bpm').value);
+        let beatDur = 60.0 / bpm;
+        let now = audioCtx.currentTime;
+        
+        // --- v16 關鍵：4拍預備 + 首拍長和弦 ---
+        let preset = _tone_0000_JCLive_sf2_file;
+        let firstRootName = currentRoots[0];
+        let firstRootMidi = getMidiPitch(firstRootName);
+        let chordDur = beatDur * 4; // 讓首拍和弦延音 4 拍
+
+        for(let i=0; i<countInBeats; i++) {
+            let t = now + (i * beatDur);
+            
+            // 每一拍都有 Click
+            playStickClick(t);
+            
+            // 只有第 1 拍同時下和弦 (給調性)
+            if(i === 0) {
+                // 使用 chordGainNode 確保受控於滑桿
+                [0, 4, 7].forEach(semi => {
+                    player.queueWaveTable(audioCtx, chordGainNode, preset, t, firstRootMidi + semi, chordDur, 0.5);
+                });
+            }
+        }
+
+        let startDelay = countInBeats * beatDur;
+        nextNoteTime = now + startDelay;
+        
+        setTimeout(() => {
+            if(isPlaying) {
+                btn.innerHTML = "⏹ 停止";
+                btn.classList.remove('warming');
+                btn.classList.add('stop');
+            }
+        }, startDelay * 1000);
         
         scheduler();
     }
@@ -1807,11 +1871,13 @@ var _tone_0000_JCLive_sf2_file={
     function stop() {
         isPlaying = false;
         clearTimeout(timerID);
-        // --- v8 修正：確保乾淨停止 ---
         if(player && audioCtx) player.cancelQueue(audioCtx);
         
-        document.getElementById('playBtn').innerHTML = "▶ 開始練習";
-        document.getElementById('playBtn').classList.remove('stop');
+        let btn = document.getElementById('playBtn');
+        btn.innerHTML = "▶ 開始練習";
+        btn.classList.remove('stop');
+        btn.classList.remove('warming');
+        
         document.getElementById('noteDisplay').innerText = "Ready";
         document.getElementById('actionDisplay').innerText = "暫停中";
     }
