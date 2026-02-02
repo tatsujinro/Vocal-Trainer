@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Daily Vocal Workout</title>
     <style>
-        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #40c4ff; --accent-light: #82e9ff; }
+        :root { --bg-color: #121212; --card-bg: #1e1e1e; --text-main: #e0e0e0; --accent: #ff5252; --accent-light: #ff867f; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; text-align: center; user-select: none; }
         h1 { color: var(--accent); margin-bottom: 5px; font-size: 1.5rem; }
         p { color: #888; margin-top: 0; font-size: 0.9rem; }
@@ -36,12 +36,12 @@
         .tab-btn.active { background: var(--card-bg); color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
         
         .play-btn { 
-            background: var(--accent); color: #000; border: none; padding: 18px 40px; border-radius: 50px; 
+            background: var(--accent); color: white; border: none; padding: 18px 40px; border-radius: 50px; 
             font-size: 1.2rem; font-weight: 800; margin-top: 10px; width: 100%; letter-spacing: 1px;
-            box-shadow: 0 0 20px rgba(64, 196, 255, 0.4); transition: transform 0.1s;
+            box-shadow: 0 0 20px rgba(255, 82, 82, 0.4); transition: transform 0.1s;
         }
         .play-btn:active { transform: scale(0.96); }
-        .play-btn.stop { background: #ff5252; color: white; box-shadow: none; }
+        .play-btn.stop { background: #536dfe; color: white; box-shadow: none; }
         .play-btn.warming { background: #333; color: #888; pointer-events: none; }
 
         .status-display { margin-top: 10px; height: 100px; display: flex; flex-direction: column; justify-content: center; background: #000; border-radius: 12px; border: 1px solid #333; }
@@ -59,12 +59,12 @@
 
     <div id="loadingMask" class="loading-mask">
         <div style="font-size: 2rem; margin-bottom: 10px;">🎹</div>
-        <div>v19 系統初始化中...</div>
+        <div>v17 系統初始化中...</div>
         <div id="errorDisplay" style="color:red; margin-top:20px; font-size:0.8rem; padding:20px;"></div>
     </div>
 
     <h1>聲樂教練 Pro</h1>
-    <p>非阻塞安全版</p>
+    <p>螢幕恆亮版</p>
 
     <div class="tabs">
         <button id="btn-liptrill" class="tab-btn active" onclick="switchMode('liptrill')">👄 唇顫音</button>
@@ -124,14 +124,10 @@
     <div class="status-display">
         <div class="current-note" id="noteDisplay">Ready</div>
         <div class="action-text" id="actionDisplay">準備開始</div>
-        <div class="wake-status" id="wakeStatus"></div>
+        <div class="wake-status" id="wakeStatus">💡 省電模式待機中</div>
     </div>
 
     <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ 開始練習</button>
-    
-    <audio id="silentAudioPlayer" loop playsinline style="display:none;" 
-        src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMD//////////////////////////////////////////////////////////////////wAAAP9MYXZj৫৮Ljc2LjEwMAAAAAAAAAAAAP/zBKAAAAAAABHgAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAA">
-    </audio>
 
     <script>
     'use strict';
@@ -1682,6 +1678,8 @@ var _tone_0000_JCLive_sf2_file={
     let globalPeakIndex = 0;
     
     let countInBeats = 4; 
+    
+    // v17: 喚醒鎖變數
     let wakeLock = null;
 
     const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1807,14 +1805,21 @@ var _tone_0000_JCLive_sf2_file={
         osc.stop(time + 0.1);
     }
 
+    // --- v17: 螢幕喚醒鎖定邏輯 ---
     async function requestWakeLock() {
         try {
             if ('wakeLock' in navigator) {
                 wakeLock = await navigator.wakeLock.request('screen');
-                document.getElementById('wakeStatus').innerText = "💡 螢幕恆亮 | 媒體模式(嘗試中)";
+                document.getElementById('wakeStatus').innerText = "☀️ 螢幕恆亮已開啟";
+                wakeLock.addEventListener('release', () => {
+                    document.getElementById('wakeStatus').innerText = "💡 螢幕恆亮已釋放";
+                });
+            } else {
+                document.getElementById('wakeStatus').innerText = "⚠️ 此瀏覽器不支援恆亮";
             }
         } catch (err) {
             console.error(err);
+            document.getElementById('wakeStatus').innerText = "⚠️ 恆亮啟用失敗 (低電量模式?)";
         }
     }
 
@@ -1822,25 +1827,14 @@ var _tone_0000_JCLive_sf2_file={
         if (wakeLock !== null) {
             wakeLock.release();
             wakeLock = null;
-            document.getElementById('wakeStatus').innerText = "";
         }
     }
 
     async function togglePlay() {
         if (isPlaying) { stop(); return; }
 
-        // 1. 喚醒鎖
+        // 1. 請求螢幕恆亮
         requestWakeLock();
-
-        // --- v19 修復：非阻塞式播放 ---
-        // 嘗試播放隱形 MP3，但使用 catch 捕獲錯誤，且不使用 await 阻擋
-        // 這樣就算手機拒絕了 MP3，下面的鋼琴還是會響
-        let silentEl = document.getElementById('silentAudioPlayer');
-        silentEl.play().then(()=>{
-            console.log("Media mode active");
-        }).catch(e => {
-            console.log("Media mode rejected (Ringer mode active)", e);
-        });
 
         if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1897,12 +1891,9 @@ var _tone_0000_JCLive_sf2_file={
 
     function stop() {
         isPlaying = false;
-        releaseWakeLock();
         
-        // 停止隱形 MP3
-        let silentEl = document.getElementById('silentAudioPlayer');
-        silentEl.pause();
-        silentEl.currentTime = 0;
+        // 2. 釋放螢幕恆亮
+        releaseWakeLock();
         
         clearTimeout(timerID);
         if(player && audioCtx) player.cancelQueue(audioCtx);
